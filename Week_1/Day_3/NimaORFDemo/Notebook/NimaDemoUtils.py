@@ -80,14 +80,27 @@ def PulsarDistMaker(Npulsars, seed = None, skyplot = True, disttype = 'uniform')
         return lam, beta, pname, np.arccos(np.dot(pos_vec, pos_vec.T))
 
 def GWBInj(Amp, start_obs, end_obs, Npulsars, ang, seed, toas):
+    '''
+    This function injects a GWB to a set of toas.
 
+    :param: Amp: the amplitude of GWB
+    :param: start_obs: starting observation time
+    :param: end_obs: ending observation time
+    :param: Npulsars: the number of pulsars in your pta
+    :param: ang: a flat list of angular separation between pulsars
+    :param: seed: sets the seed for the random number generator
+    :param: toas: an array of arrays containing pulsar toas
+    :output: gw_res: "post-fit" GW residuals in time-domain
+
+    Author: Nima Laal
+    '''
     day = 24*3600
     year = 365.25 * day
     kpc_to_meter = 3.086*10**(19)
     p_distance = 1 #kpc
     light_speed = 299792458
     f_yr = 1/year #reference frequency in seconds
-    alpha = -1 #alpha
+    alpha = -2/3 #alpha
     howml = 10 #pre factor to extend the observation time. Needed to make the residuals non-periodic with period of each pulsar's Tspan.
 
     # gw start and end times for entire data set
@@ -160,13 +173,38 @@ def binned_corr_Maker(xi, rho, sig, nbins = 20):
     xi_mean = []; xi_err = []; rho_avg = []; sig_avg = []
     for ii in range (len(bin_loc) - 1):
         mask = np.logical_and(xi >= bin_loc[ii] , xi < bin_loc[ii+1])
-        xi_mean.append(np.mean(xi[mask]))
-        xi_err.append(np.std(xi[mask]))
-        r, s = weightedavg(rho[mask], sig[mask])
-        rho_avg.append(r); sig_avg.append(s)
+        if not rho[mask].size == 0:
+            r, s = weightedavg(rho[mask], sig[mask])
+            rho_avg.append(r); sig_avg.append(s)
+            xi_mean.append(np.mean(xi[mask]))
+            xi_err.append(np.std(xi[mask]))
+    return np.array(xi_mean), np.array(xi_err), np.array(rho_avg), np.array(sig_avg)
+
+def binned_corr_Maker_forced(xi, rho, sig, npairs = 66):
+    idx = np.argsort(xi)
+    xi_sorted = xi[idx]
+    rho_sorted = rho[idx]
+    sig_sorted = sig[idx]
+    xi_mean = []; xi_err = []; rho_avg = []; sig_avg = []
+    i = 0
+    while i < len(xi_sorted):
+        xi_mean.append(np.mean(xi_sorted[i:npairs+i]))
+        xi_err.append(np.std(xi_sorted[i:npairs+i]))
+        r, s = weightedavg(rho_sorted[i:npairs+i], sig_sorted[i:npairs+i])
+        rho_avg.append(r)
+        sig_avg.append(s)
+        i += npairs
     return np.array(xi_mean), np.array(xi_err), np.array(rho_avg), np.array(sig_avg)
 
 def gt( x, tau, mono ) :
+    '''
+    A simple way to parameterize transverse ORFs!
+    :param: x: angular separation
+    :param: tau: the parameter needed to search for all mathematically possible transverse orfs.
+    :param: mono: off-set of the orfs
+    
+    Author: Nima Laal
+    '''
     if np.all(x) == 0:
         return 1 + mono
     else:
@@ -218,9 +256,3 @@ class CrossModel(object):
 
     def get_prior_transform(self, cube):
         return (self.pmax - self.pmin) * cube + self.pmin
-
-
-def gt( x, tau, mono ) :
-    cos_ang = np.cos(x)
-    k = 1/2*(1-cos_ang)
-    return 1/8 * (3+cos_ang) + (1-tau)*3/4*k*np.log(k) + mono
